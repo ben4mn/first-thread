@@ -10,5 +10,10 @@ export default defineConfig({
   plugins: [react()],
   resolve: { alias: { '@': fileURLToPath(new URL('.', import.meta.url)) } },
   css: { postcss: { plugins: [tailwindcss()] } },
+  server: {
+    proxy: process.env.FIRST_THREAD_AI
+      ? { '/api/ai': 'http://127.0.0.1:5276' }
+      : undefined,
+  },
   build: { outDir: 'dist/client', emptyOutDir: true },
 });

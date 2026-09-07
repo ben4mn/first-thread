@@ -10,7 +10,7 @@ import {
   moveStep,
   scenarioMarkdown,
   uid,
-} from '../lib/domain.ts';
+} from '../lib/legacy-domain.ts';
 
 await test('a complete custom workshop survives export/import without losing its records', () => {
   const w = initialWorkspace();

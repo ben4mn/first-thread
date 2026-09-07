@@ -1,444 +1,536 @@
 'use client';
-
-// Browser storage and URL state are synchronized after hydration; these effects
-// deliberately update state once the external, browser-only sources are available.
 /* eslint-disable react/react-compiler */
-
-import {
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-  type SyntheticEvent,
-} from 'react';
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 import {
   ArrowRight,
-  ArrowDown,
-  ArrowUp,
-  Plus,
-  Download,
-  Upload,
-  Pencil,
-  GitBranch,
-  CircleDot,
+  Bot,
   Check,
-  AlertTriangle,
+  Download,
+  GitBranch,
+  Layers,
+  Pencil,
+  Plus,
   Trash2,
-  ExternalLink,
+  Upload,
 } from 'lucide-react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 import {
   Dialog,
   DialogContent,
-  DialogTitle,
   DialogDescription,
+  DialogTitle,
 } from '@/components/ui/dialog';
 import {
   AlertDialog,
   AlertDialogContent,
-  AlertDialogTitle,
   AlertDialogDescription,
+  AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import {
+  Sheet,
+  SheetContent,
+  SheetTitle,
+  SheetDescription,
+} from '@/components/ui/sheet';
 import { NativeSelect } from '@/components/ui/native-select';
 import {
+  fromExample,
   initialWorkspace,
   newScenario,
-  newStep,
-  moveStep,
   parseWorkspace,
   serializeWorkspace,
-  MAX_WORKSPACE_BYTES,
   scenarioMarkdown,
   uid,
-  type Step,
   type Scenario,
   type Workspace,
 } from '@/lib/domain';
-import { principles, questions, glossary } from '@/lib/company';
-
-const STORAGE_KEY = 'first-thread.workspace.v1';
-function formText(data: FormData, key: string) {
-  const value = data.get(key);
-  return typeof value === 'string' ? value : '';
-}
-const REPO = 'https://github.com/ben4mn/first-thread';
-function download(name: string, content: string, type = 'application/json') {
-  const blob = new Blob([content], { type });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = name;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
-function Field({
-  label,
-  hint,
-  children,
-  full = false,
-}: {
-  label: string;
-  hint?: string;
-  children: ReactNode;
-  full?: boolean;
-}) {
-  return (
-    <label className={`field ${full ? 'full' : ''}`}>
-      {label}
-      {hint && <span className="hint">{hint}</span>}
-      {children}
-    </label>
-  );
-}
-function FormInput({
+import {
+  blankNode,
+  flowIssues,
+  parseFlow,
+  makeId,
+  type Component,
+  type Flow,
+  type FlowEdge,
+  type FlowNode,
+} from '@/lib/graph';
+import { examples } from '@/lib/examples';
+import { FlowMap } from './flow-map';
+import { Rehearsal } from './rehearsal';
+import { AIDesigner } from './ai-designer';
+import { CompanyNotebook, Method } from './company-notebook';
+import { Field, formText, download, REPO } from './studio-ui';
+const KEY = 'first-thread.workspace.v2';
+const OLD_KEY = 'first-thread.workspace.v1';
+const split = (s: string) =>
+  s
+    .split(',')
+    .map((x) => x.trim())
+    .filter(Boolean);
+function Input({
   label,
   name,
   value = '',
-  multiline = false,
+  area = false,
   required = false,
   hint,
-  full = false,
 }: {
   label: string;
   name: string;
   value?: string;
-  multiline?: boolean;
+  area?: boolean;
   required?: boolean;
   hint?: string;
-  full?: boolean;
 }) {
   return (
-    <Field label={label} hint={hint} full={full}>
-      {multiline ? (
+    <Field label={label} hint={hint}>
+      {area ? (
         <textarea
           name={name}
           defaultValue={value}
-          required={required}
-          maxLength={40000}
           rows={3}
+          maxLength={40000}
+          required={required}
         />
       ) : (
         <input
           name={name}
           defaultValue={value}
-          required={required}
           maxLength={40000}
+          required={required}
         />
       )}
     </Field>
   );
 }
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="fact">
-      <dt>{label}</dt>
-      <dd>{value || 'Not yet captured'}</dd>
-    </div>
-  );
-}
-
-export default function Home() {
+export default function Workshop() {
   const [workspace, setWorkspace] = useState<Workspace>(initialWorkspace);
   const [ready, setReady] = useState(false);
-  const [storageError, setStorageError] = useState('');
-  const [storageBlocked, setStorageBlocked] = useState(false);
+  const [blocked, setBlocked] = useState(false);
   const [saved, setSaved] = useState(false);
-  const [view, setView] = useState('workshop');
-  const [tab, setTab] = useState('today');
-  const [selected, setSelected] = useState<string | null>('step-2');
-  const [modal, setModal] = useState<'new' | 'brief' | 'step' | null>(null);
-  const [stepDraft, setStepDraft] = useState<Step | null>(null);
-  const [pendingImport, setPendingImport] = useState<Workspace | null>(null);
-  const [deleteTarget, setDeleteTarget] = useState<'step' | 'scenario' | null>(
-    null,
-  );
   const [notice, setNotice] = useState('');
-  const fileRef = useRef<HTMLInputElement>(null);
+  const [storageError, setStorageError] = useState('');
+  const [view, setView] = useState('studio');
+  const [tab, setTab] = useState('map');
+  const [assisted, setAssisted] = useState(false);
+  const [selected, setSelected] = useState<string | null>(null);
+  const [modal, setModal] = useState<
+    'brief' | 'new' | 'node' | 'edge' | 'component' | null
+  >(null);
+  const [draftNode, setDraftNode] = useState<FlowNode | null>(null);
+  const [draftEdge, setDraftEdge] = useState<FlowEdge | null>(null);
+  const [draftComponent, setDraftComponent] = useState<Component | null>(null);
+  const [pendingImport, setPendingImport] = useState<Workspace | null>(null);
+  const [removeTarget, setRemoveTarget] = useState<
+    'node' | 'edge' | 'scenario' | null
+  >(null);
+  const file = useRef<HTMLInputElement>(null);
   const scenario =
     workspace.scenarios.find((s) => s.id === workspace.activeId) ||
     workspace.scenarios[0];
-  const step = scenario.steps.find((s) => s.id === selected);
-
+  const flow =
+    assisted && scenario.proposed ? scenario.proposed : scenario.flow;
+  const node = flow.nodes.find((n) => n.id === selected);
+  const issues = flowIssues(flow);
   useEffect(() => {
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
-      if (stored) {
-        const data = parseWorkspace(stored);
-        setWorkspace(data);
-        setSelected(
-          data.scenarios.find((s) => s.id === data.activeId)?.steps[0]?.id ||
-            null,
-        );
+      const current = localStorage.getItem(KEY);
+      const legacy = current ? null : localStorage.getItem(OLD_KEY);
+      if (current || legacy) {
+        setWorkspace(parseWorkspace(current || legacy!));
+        if (legacy)
+          setNotice(
+            'Your previous workshop was preserved and migrated. Open an industry example to explore the new model.',
+          );
       }
     } catch {
+      setBlocked(true);
       setStorageError(
-        'We could not load the saved workspace. It has been preserved. Export the saved data before starting a fresh copy.',
+        'Saved work could not be loaded. The original data is preserved; export it before replacing it.',
       );
-      setStorageBlocked(true);
     }
     setReady(true);
     const route = () =>
-      setView(location.hash === '#/company' ? 'company' : 'workshop');
+      setView(
+        location.hash === '#/company'
+          ? 'company'
+          : location.hash === '#/method'
+            ? 'method'
+            : 'studio',
+      );
     route();
     window.addEventListener('hashchange', route);
     return () => window.removeEventListener('hashchange', route);
   }, []);
   useEffect(() => {
-    if (!ready || storageBlocked) return;
-    setSaved(false);
+    if (!ready || blocked) return;
     try {
-      const serialized = serializeWorkspace(workspace);
-      localStorage.setItem(STORAGE_KEY, serialized);
+      localStorage.setItem(KEY, serializeWorkspace(workspace));
       setSaved(true);
       setStorageError('');
     } catch {
+      setSaved(false);
       setStorageError(
-        'Changes are in memory, but this browser could not save them. Export your workspace before closing this page.',
+        'Browser saving is unavailable. Export the workspace before closing this page.',
       );
     }
-  }, [workspace, ready, storageBlocked]);
-
-  function commitWorkspace(candidate: Workspace): boolean {
+  }, [workspace, ready, blocked]);
+  function commit(next: Workspace) {
     try {
-      serializeWorkspace(candidate);
-    } catch (error) {
+      serializeWorkspace(next);
+      setWorkspace(next);
+      setSaved(false);
+      return true;
+    } catch (e) {
       setNotice(
-        error instanceof Error
-          ? error.message
-          : 'This change could not be saved.',
+        e instanceof Error ? e.message : 'This change could not be saved.',
       );
       return false;
     }
-    setWorkspace(candidate);
-    return true;
   }
-  function updateScenario(patch: Partial<Scenario>) {
-    return commitWorkspace({
+  function update(patch: Partial<Scenario>) {
+    return commit({
       ...workspace,
       scenarios: workspace.scenarios.map((s) =>
-        s.id === workspace.activeId ? { ...s, ...patch } : s,
+        s.id === scenario.id ? { ...s, ...patch } : s,
       ),
     });
   }
-  function updateNotebook(
-    field: 'mission' | 'vision' | 'notes',
-    value: string,
-  ) {
-    commitWorkspace({
-      ...workspace,
-      notebook: { ...workspace.notebook, [field]: value },
-    });
-  }
-  function switchScenario(id: string) {
-    setWorkspace((w) => ({ ...w, activeId: id }));
-    setSelected(
-      workspace.scenarios.find((s) => s.id === id)?.steps[0]?.id || null,
-    );
-    setTab('today');
-    setNotice('');
+  function updateFlow(next: Flow) {
+    try {
+      const valid = parseFlow(next);
+      return update(assisted ? { proposed: valid } : { flow: valid });
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Flow is invalid.');
+      return false;
+    }
   }
   function exportWorkspace() {
-    download('first-thread-workspace.json', serializeWorkspace(workspace));
-    setNotice(
-      'Workspace exported. Import this file on another device to continue.',
-    );
+    download('first-thread-workspace-v2.json', serializeWorkspace(workspace));
+    setNotice('Workspace exported, including current and proposed flows.');
   }
-  function exportBrief() {
-    download(
-      `${
-        scenario.title
-          .toLowerCase()
-          .replace(/[^a-z0-9]+/g, '-')
-          .slice(0, 60) || 'scenario'
-      }.md`,
-      scenarioMarkdown(scenario),
-      'text/markdown',
-    );
-    setNotice('Workshop brief exported as Markdown.');
+  function choose(id: string) {
+    setWorkspace((w) => ({ ...w, activeId: id }));
+    setAssisted(false);
+    setSelected(null);
+    setTab('map');
+  }
+  function loadExample(id: string) {
+    const existing = workspace.scenarios.find((s) => s.id === id);
+    if (existing) {
+      choose(id);
+      return;
+    }
+    if (workspace.scenarios.length >= 100) {
+      setNotice(
+        'This workspace supports 100 flows. Export and remove older drafts first.',
+      );
+      return;
+    }
+    const s = fromExample(id);
+    if (
+      commit({
+        ...workspace,
+        scenarios: [...workspace.scenarios, s],
+        activeId: s.id,
+      })
+    ) {
+      setAssisted(false);
+      setTab('map');
+    }
   }
   function duplicate() {
     if (workspace.scenarios.length >= 100) {
-      setNotice(
-        'This workspace supports up to 100 scenarios. Export a copy before starting another workspace.',
-      );
+      setNotice('This workspace supports 100 flows.');
       return;
     }
     const copy = {
       ...structuredClone(scenario),
       id: uid(),
       title: `${scenario.title.slice(0, 39993)} (copy)`,
-      steps: scenario.steps.map((s) => ({ ...s, id: uid() })),
+      sample: false,
     };
     if (
-      !commitWorkspace({
+      commit({
         ...workspace,
         scenarios: [...workspace.scenarios, copy],
         activeId: copy.id,
       })
-    )
-      return;
-    setSelected(copy.steps[0]?.id || null);
-    setNotice('Scenario duplicated.');
-  }
-  async function readImport(file?: File) {
-    if (!file) return;
-    try {
-      if (file.size > MAX_WORKSPACE_BYTES)
-        throw new Error('Choose a First Thread export under 2 MB.');
-      setPendingImport(parseWorkspace(await file.text()));
-      setNotice('');
-    } catch (error) {
-      setNotice(
-        error instanceof Error ? error.message : 'Could not read this file.',
-      );
-    } finally {
-      if (fileRef.current) fileRef.current.value = '';
+    ) {
+      setSelected(null);
+      setNotice('Independent flow copy created.');
     }
+  }
+  async function readFile(selectedFile?: File) {
+    if (!selectedFile) return;
+    try {
+      if (selectedFile.size > 2000000)
+        throw new Error('Choose a workspace under 2 MB.');
+      setPendingImport(parseWorkspace(await selectedFile.text()));
+    } catch (e) {
+      setNotice(e instanceof Error ? e.message : 'Import failed.');
+    } finally {
+      if (file.current) file.current.value = '';
+    }
+  }
+  function openNode(n?: FlowNode) {
+    setDraftNode(
+      n ||
+        blankNode(
+          flow.components[0]?.id || '',
+          Math.min(150, Math.max(-1, ...flow.nodes.map((x) => x.column)) + 1),
+        ),
+    );
+    setSelected(null);
+    setNotice('');
+    setModal('node');
+  }
+  function openEdge(e?: FlowEdge) {
+    setDraftEdge(
+      e || {
+        id: makeId(),
+        from: flow.nodes[0]?.id || '',
+        to: flow.nodes[1]?.id || '',
+        signal: '',
+        when: 'always',
+      },
+    );
+    setNotice('');
+    setModal('edge');
   }
   function saveBrief(e: SyntheticEvent<HTMLFormElement>) {
     e.preventDefault();
-    const data = new FormData(e.currentTarget);
-    const title = formText(data, 'title').trim();
-    const trigger = formText(data, 'trigger').trim();
-    const outcome = formText(data, 'outcome').trim();
+    const d = new FormData(e.currentTarget);
+    const title = formText(d, 'title').trim(),
+      trigger = formText(d, 'trigger').trim(),
+      outcome = formText(d, 'outcome').trim();
     if (!title || !trigger || !outcome) {
-      setNotice(
-        'Give the scenario a name, one trigger, and one intended outcome.',
-      );
+      setNotice('Name the flow, trigger, and intended outcome.');
       return;
     }
     const patch = {
       title,
       trigger,
       outcome,
-      context: formText(data, 'context'),
-      notes: formText(data, 'notes'),
+      context: formText(d, 'context'),
+      notes: formText(d, 'notes'),
+      industry: formText(d, 'industry'),
+      future: formText(d, 'future'),
+      firstMove: formText(d, 'firstMove'),
+      hypothesis: formText(d, 'hypothesis'),
+      measure: formText(d, 'measure'),
+      owner: formText(d, 'owner'),
+      guardrail: formText(d, 'guardrail'),
+      questions: formText(d, 'questions'),
     };
+    let ok = false;
     if (modal === 'new') {
-      const created = newScenario(
-        title,
-        trigger,
-        outcome,
-        patch.context,
-        patch.notes,
-      );
-      if (
-        !commitWorkspace({
-          ...workspace,
-          scenarios: [...workspace.scenarios, created],
-          activeId: created.id,
-        })
-      )
-        return;
-      setSelected(null);
-      setTab('today');
-    } else if (!updateScenario(patch)) return;
-    setModal(null);
-    setNotice('Scenario saved.');
-  }
-  function editStep(target?: Step) {
-    setNotice('');
-    setStepDraft(target || newStep());
-    setModal('step');
-  }
-  function saveStep(e: SyntheticEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (!stepDraft) return;
-    const data = new FormData(e.currentTarget);
-    const title = formText(data, 'title').trim();
-    if (!title) {
-      setNotice('Give this step a name.');
-      return;
+      const s = { ...newScenario(title, trigger, outcome), ...patch };
+      s.flow.object = formText(d, 'object') || 'Business case';
+      s.flow.identity = formText(d, 'identity') || 'caseId';
+      ok = commit({
+        ...workspace,
+        scenarios: [...workspace.scenarios, s],
+        activeId: s.id,
+      });
+      setAssisted(false);
+    } else
+      ok = update({
+        ...patch,
+        [assisted ? 'proposed' : 'flow']: {
+          ...flow,
+          object: formText(d, 'object'),
+          identity: formText(d, 'identity'),
+        },
+      });
+    if (ok) {
+      setModal(null);
+      setNotice('Flow brief saved.');
     }
-    const next = { ...stepDraft };
-    for (const key of [
+  }
+  function saveNode(e: SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!draftNode) return;
+    const d = new FormData(e.currentTarget);
+    const components = [...flow.components];
+    let componentId = formText(d, 'componentId');
+    if (!componentId) {
+      const name = formText(d, 'componentName').trim();
+      if (!name) {
+        setNotice('Choose an existing component or name a new one.');
+        return;
+      }
+      componentId = makeId();
+      components.push({
+        id: componentId,
+        name,
+        kind: formText(d, 'actorKind') as Component['kind'],
+        responsibility: formText(d, 'fallback'),
+      });
+    }
+    const next = { ...draftNode };
+    for (const k of [
       'title',
-      'tool',
-      'owner',
+      'capability',
+      'state',
       'surface',
       'channel',
-      'incoming',
-      'outgoing',
       'friction',
       'source',
-      'adjacent',
+      'instruction',
+      'outputContract',
+      'fallback',
     ] as const)
-      next[key] = formText(data, key).trim();
-    next.evidence = formText(data, 'evidence') as Step['evidence'];
+      next[k] = formText(d, k).trim();
+    next.componentId = componentId;
+    next.kind = formText(d, 'kind') as FlowNode['kind'];
+    next.result = formText(d, 'result') as FlowNode['result'];
+    next.evidence = formText(d, 'evidence') as FlowNode['evidence'];
+    next.inputs = split(formText(d, 'inputs'));
+    next.outputs = split(formText(d, 'outputs'));
+    for (const k of [
+      'minutes',
+      'wait',
+      'proposedMinutes',
+      'column',
+      'lane',
+    ] as const)
+      next[k] = Number(formText(d, k));
+    next.ai = formText(d, 'ai') === 'true';
+    next.review = formText(d, 'review') === 'true';
+    const nodes = flow.nodes.some((n) => n.id === next.id)
+      ? flow.nodes.map((n) => (n.id === next.id ? next : n))
+      : [...flow.nodes, next];
     if (
-      !updateScenario({
-        steps: scenario.steps.some((s) => s.id === next.id)
-          ? scenario.steps.map((s) => (s.id === next.id ? next : s))
-          : [...scenario.steps, next],
+      updateFlow({ ...flow, components, nodes, start: flow.start || next.id })
+    ) {
+      setModal(null);
+      setSelected(next.id);
+      setNotice('Action contract saved.');
+    }
+  }
+  function saveEdge(e: SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!draftEdge) return;
+    const d = new FormData(e.currentTarget);
+    const next = {
+      ...draftEdge,
+      from: formText(d, 'from'),
+      to: formText(d, 'to'),
+      signal: formText(d, 'signal').trim(),
+      when: formText(d, 'when') as FlowEdge['when'],
+    };
+    if (!next.signal) {
+      setNotice('Name the signal carried by this connection.');
+      return;
+    }
+    if (
+      updateFlow({
+        ...flow,
+        edges: flow.edges.some((x) => x.id === next.id)
+          ? flow.edges.map((x) => (x.id === next.id ? next : x))
+          : [...flow.edges, next],
+      })
+    ) {
+      setModal(null);
+      setNotice('Signal connection saved.');
+    }
+  }
+  function saveComponent(e: SyntheticEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!draftComponent) return;
+    const d = new FormData(e.currentTarget);
+    const c = {
+      ...draftComponent,
+      name: formText(d, 'name').trim(),
+      kind: formText(d, 'kind') as Component['kind'],
+      responsibility: formText(d, 'responsibility'),
+    };
+    if (
+      updateFlow({
+        ...flow,
+        components: flow.components.map((x) => (x.id === c.id ? c : x)),
       })
     )
-      return;
-    setSelected(next.id);
-    setModal(null);
-    setNotice('Step saved.');
+      setModal(null);
   }
   function remove() {
-    if (deleteTarget === 'step' && step) {
-      const remaining = scenario.steps.filter((s) => s.id !== step.id);
-      updateScenario({ steps: remaining });
-      setSelected(remaining[0]?.id || null);
-    } else if (deleteTarget === 'scenario' && workspace.scenarios.length > 1) {
+    if (removeTarget === 'node' && node) {
+      const nodes = flow.nodes.filter((n) => n.id !== node.id);
+      if (
+        updateFlow({
+          ...flow,
+          nodes,
+          edges: flow.edges.filter(
+            (e) => e.from !== node.id && e.to !== node.id,
+          ),
+          start: flow.start === node.id ? nodes[0]?.id || '' : flow.start,
+        })
+      )
+        setSelected(null);
+    } else if (removeTarget === 'edge' && draftEdge)
+      updateFlow({
+        ...flow,
+        edges: flow.edges.filter((e) => e.id !== draftEdge.id),
+      });
+    else if (removeTarget === 'scenario' && workspace.scenarios.length > 1) {
       const remaining = workspace.scenarios.filter((s) => s.id !== scenario.id);
-      setWorkspace((w) => ({
-        ...w,
-        scenarios: remaining,
-        activeId: remaining[0].id,
-      }));
-      setSelected(remaining[0].steps[0]?.id || null);
+      commit({ ...workspace, scenarios: remaining, activeId: remaining[0].id });
+      setAssisted(false);
     }
-    setDeleteTarget(null);
-    setNotice('Removed from this workspace.');
+    setRemoveTarget(null);
+    setModal(null);
   }
-  const frictionCount = scenario.steps.filter((s) => s.friction).length;
   return (
     <>
-      <a className="sr-only focus:not-sr-only" href="#main">
-        Skip to content
-      </a>
       <header className="topbar">
-        <a href="#/workshop" className="brand">
+        <a className="brand" href="#/studio">
           <span className="brand-mark">
             <GitBranch size={20} />
           </span>
-          First Thread<span className="sr-only"> home</span>
+          First Thread
         </a>
         <nav aria-label="Main navigation">
-          <a
-            href="#/workshop"
-            className={view === 'workshop' ? 'active' : ''}
-            aria-current={view === 'workshop' ? 'page' : undefined}
-          >
-            Scenario workshop
+          <a href="#/studio" className={view === 'studio' ? 'active' : ''}>
+            Flow studio
           </a>
-          <a
-            href="#/company"
-            className={view === 'company' ? 'active' : ''}
-            aria-current={view === 'company' ? 'page' : undefined}
-          >
+          <a href="#/method" className={view === 'method' ? 'active' : ''}>
+            Model & method
+          </a>
+          <a href="#/company" className={view === 'company' ? 'active' : ''}>
             Company notebook
           </a>
         </nav>
         <div className="top-meta">
-          <span className="pill">Working prototype · 0.1</span>
-          <div className="avatars" aria-label="Built for Ben and Paul">
-            <span className="avatar">B</span>
-            <span className="avatar">P</span>
-          </div>
+          <span className="pill">Industry independent · 0.2</span>
+          <button className="btn" onClick={exportWorkspace}>
+            <Download />
+            Export
+          </button>
+          <button
+            className="btn icon"
+            aria-label="Import workspace"
+            onClick={() => file.current?.click()}
+          >
+            <Upload />
+          </button>
         </div>
       </header>
+      <input
+        ref={file}
+        type="file"
+        accept=".json"
+        className="sr-only"
+        onChange={(e) => void readFile(e.target.files?.[0])}
+        aria-label="Workspace JSON"
+      />
       {storageError && (
         <div className="status-banner" role="alert">
-          <AlertTriangle size={18} />
-          <span>{storageError}</span>
+          {storageError}
           <button className="btn" onClick={exportWorkspace}>
             Export current work
           </button>
-          {storageBlocked && (
+          {blocked && (
             <>
               <button
                 className="btn"
@@ -446,301 +538,50 @@ export default function Home() {
                   try {
                     download(
                       'first-thread-recovery.txt',
-                      localStorage.getItem(STORAGE_KEY) || '',
+                      localStorage.getItem(KEY) ||
+                        localStorage.getItem(OLD_KEY) ||
+                        '',
                       'text/plain',
                     );
                   } catch {
-                    setNotice(
-                      'This browser is blocking storage access. Current work can still be exported.',
-                    );
+                    setNotice('Stored data is inaccessible in this browser.');
                   }
                 }}
               >
-                Export saved data
+                Export stored data
               </button>
               <button
                 className="btn"
-                onClick={() => {
-                  setStorageBlocked(false);
-                  setStorageError('');
-                }}
+                onClick={() => setPendingImport(workspace)}
               >
-                Use current workspace
+                Replace stored workspace
               </button>
             </>
           )}
         </div>
       )}
-      <input
-        type="file"
-        ref={fileRef}
-        accept=".json,application/json"
-        className="sr-only"
-        tabIndex={-1}
-        aria-label="Import workspace file"
-        onChange={(e) => void readImport(e.target.files?.[0])}
-      />
       {view === 'company' ? (
-        <main id="main" className="company">
-          <div className="company-title">
-            <div>
-              <div className="eyebrow">Company notebook / draft 01</div>
-              <h1>Make the path to better outcomes visible.</h1>
-              <p>
-                A starting point for Ben and Paul. The company name, language,
-                customer, and business model are still open.
-              </p>
-            </div>
-            <div className="company-note">
-              <div className="eyebrow">From the conversations</div>
-              <p>
-                The September 6 call sets the scope of the first prototype. The
-                first conversation supplies the larger ambition. These
-                statements are proposed language for discussion.
-              </p>
-            </div>
-          </div>
-          <section
-            className="statements"
-            aria-label="Editable mission and vision"
-          >
-            <div className="statement">
-              <label htmlFor="mission" className="eyebrow">
-                01 / Our mission
-              </label>
-              <textarea
-                id="mission"
-                value={workspace.notebook.mission}
-                onChange={(e) => updateNotebook('mission', e.target.value)}
-                maxLength={40000}
-              />
-              <small>
-                Click the statement to workshop it. Saved in this browser.
-              </small>
-            </div>
-            <div className="statement vision">
-              <label htmlFor="vision" className="eyebrow">
-                02 / Our vision
-              </label>
-              <textarea
-                id="vision"
-                value={workspace.notebook.vision}
-                onChange={(e) => updateNotebook('vision', e.target.value)}
-                maxLength={40000}
-              />
-              <small>
-                A direction to work toward, not a claim of present capability.
-              </small>
-            </div>
-          </section>
-          <section className="notebook-section">
-            <div>
-              <div className="eyebrow">The thesis</div>
-              <h2>Value lives between the boxes.</h2>
-            </div>
-            <div>
-              <p>
-                An organization is more than its collection of tools. A request,
-                decision, or piece of context passes between people and systems.
-                When that path is hard to see, improving a single component can
-                leave the larger problem intact.
-              </p>
-              <p style={{ marginTop: 15 }}>
-                Start with one real situation. Make the route understandable,
-                define a better state, and choose a practical first move. Over
-                time, connected scenarios could become a living picture of how
-                the organization works.
-              </p>
-            </div>
-          </section>
-          <section className="notebook-section">
-            <div>
-              <div className="eyebrow">Working principles</div>
-              <h2>How we want to work.</h2>
-            </div>
-            <div className="principles">
-              {principles.map(([title, text]) => (
-                <div key={title}>
-                  <h3>{title}</h3>
-                  <p>{text}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="notebook-section">
-            <div>
-              <div className="eyebrow">The first useful thing</div>
-              <h2>
-                One conversation.
-                <br />
-                One clear thread.
-              </h2>
-            </div>
-            <div>
-              <p>
-                A founder-led workshop that ends with a map the person doing the
-                work recognizes, a clearer outcome, and one change worth
-                testing.
-              </p>
-              <div className="principles" style={{ marginTop: 24 }}>
-                <div>
-                  <h3>Now</h3>
-                  <p>
-                    Manual scenario capture, an editable route, visible
-                    uncertainty, and a future-state hypothesis.
-                  </p>
-                </div>
-                <div>
-                  <h3>Later, if useful</h3>
-                  <p>
-                    Connect scenarios and operational evidence. Support better
-                    decisions and, eventually, coordination across the system.
-                  </p>
-                </div>
-              </div>
-            </div>
-          </section>
-          <section className="notebook-section">
-            <div>
-              <div className="eyebrow">Still to decide</div>
-              <h2>Questions worth keeping open.</h2>
-            </div>
-            <div className="questions">
-              {questions.map((q, i) => (
-                <div className="question" key={q}>
-                  <span>0{i + 1}</span>
-                  <p>{q}</p>
-                </div>
-              ))}
-            </div>
-          </section>
-          <section className="notebook-section">
-            <div>
-              <div className="eyebrow">Shared language</div>
-              <h2>A small vocabulary.</h2>
-              <p className="small muted" style={{ marginTop: 12 }}>
-                Provisional definitions. Surface and channel especially need
-                testing.
-              </p>
-            </div>
-            <dl className="glossary">
-              {glossary.map(([term, definition]) => (
-                <div key={term}>
-                  <dt>{term}</dt>
-                  <dd>{definition}</dd>
-                </div>
-              ))}
-            </dl>
-          </section>
-          <section className="notebook-section">
-            <div>
-              <div className="eyebrow">For the next session</div>
-              <h2>
-                Keep one sentence.
-                <br />
-                Change one sentence.
-              </h2>
-            </div>
-            <div>
-              <Field
-                label="Workshop notes"
-                hint="What do we agree with? What needs rewriting? What assumption should we test next?"
-              >
-                <textarea
-                  className="note-area"
-                  value={workspace.notebook.notes}
-                  onChange={(e) => updateNotebook('notes', e.target.value)}
-                  maxLength={40000}
-                  placeholder="Capture your disagreements, decisions, and next questions…"
-                />
-              </Field>
-              <div className="actions">
-                <button
-                  className="btn primary"
-                  onClick={() =>
-                    download(
-                      'first-thread-company-notes.md',
-                      `# Company direction — workshop draft\n\n## Mission\n\n${workspace.notebook.mission}\n\n## Vision\n\n${workspace.notebook.vision}\n\n## Workshop notes\n\n${workspace.notebook.notes}\n\n## Working principles\n\n${principles.map(([a, b]) => `### ${a}\n\n${b}`).join('\n\n')}\n\n## Open questions\n\n${questions.map((q) => `- ${q}`).join('\n')}\n`,
-                      'text/markdown',
-                    )
-                  }
-                >
-                  <Download />
-                  Export company notes
-                </button>
-                <button className="btn" onClick={exportWorkspace}>
-                  Export workspace
-                </button>
-                <button
-                  className="btn"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  Import workspace
-                </button>
-              </div>
-            </div>
-          </section>
-          <div className="company-links">
-            <a
-              className="btn"
-              href={`${REPO}/blob/main/docs/company-direction.md`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Full company draft
-              <ExternalLink />
-            </a>
-            <a
-              className="btn"
-              href={`${REPO}/blob/main/docs/source-notes.md`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Sources & interpretation
-              <ExternalLink />
-            </a>
-            <a
-              className="btn"
-              href={`${REPO}/blob/main/docs/workshop-guide.md`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Workshop guide
-              <ExternalLink />
-            </a>
-          </div>
-          <div className="workspace-footer">
-            <span>
-              {saved
-                ? 'Changes saved in this browser.'
-                : 'Changes are not yet saved.'}{' '}
-              Export to share them or open on another device.
-            </span>
-            <span>First Thread is a working name.</span>
-          </div>
-        </main>
+        <CompanyNotebook
+          notebook={workspace.notebook}
+          onChange={(notebook) => {
+            commit({ ...workspace, notebook });
+          }}
+        />
+      ) : view === 'method' ? (
+        <Method />
       ) : (
-        <div className="workspace">
-          <aside className="rail" aria-label="Scenarios">
-            <div className="rail-label eyebrow">
-              <span>Your scenarios</span>
-              <span>
-                {workspace.scenarios.length.toString().padStart(2, '0')}
-              </span>
-            </div>
+        <div className="workspace studio-workspace">
+          <aside className="rail">
+            <div className="eyebrow">Business flows</div>
             <div className="scenario-list">
               {workspace.scenarios.map((s) => (
                 <button
-                  className={`scenario-btn ${scenario.id === s.id ? 'selected' : ''}`}
                   key={s.id}
-                  aria-pressed={scenario.id === s.id}
-                  onClick={() => switchScenario(s.id)}
+                  className={`scenario-btn ${s.id === scenario.id ? 'selected' : ''}`}
+                  onClick={() => choose(s.id)}
                 >
+                  <span>{s.industry}</span>
                   <strong>{s.title}</strong>
-                  <span>
-                    {s.sample ? 'Example' : 'Workshop draft'} · {s.steps.length}{' '}
-                    steps
-                  </span>
                 </button>
               ))}
             </div>
@@ -753,54 +594,47 @@ export default function Home() {
               }}
             >
               <Plus />
-              New scenario
+              Define a flow
             </button>
+            <div className="example-picker">
+              <div className="eyebrow">Try the same pattern</div>
+              {examples.map((ex) => (
+                <button key={ex.id} onClick={() => loadExample(ex.id)}>
+                  {ex.industry}
+                  <ArrowRight size={13} />
+                </button>
+              ))}
+            </div>
             <div className="rail-bottom">
               <div className="save-state">
                 <span className="dot" />
-                {!ready
-                  ? 'Loading workspace…'
-                  : saved
-                    ? 'Saved in this browser'
-                    : 'Not saved to this browser'}
+                {saved ? 'Saved in this browser' : 'Not yet saved'}
               </div>
               <p>
-                Take the workshop with you. Export a file, then import it on
-                another device.
+                One vocabulary.
+                <br />
+                Different business realities.
               </p>
-              <div className="actions">
-                <button className="btn quiet" onClick={exportWorkspace}>
-                  <Download />
-                  Export
-                </button>
-                <button
-                  className="btn quiet"
-                  onClick={() => fileRef.current?.click()}
-                >
-                  <Upload />
-                  Import
-                </button>
-              </div>
+              <a href="#/method" className="text-link small">
+                Explore the shared model ↗
+              </a>
             </div>
           </aside>
-          <main id="main" className="main">
+          <main id="main" className="main studio-main">
             <div className="heading">
               <div>
                 <div className="eyebrow">
-                  Scenario workshop /{' '}
-                  {scenario.sample ? 'Fictional example' : 'Working draft'}
+                  {scenario.industry} /{' '}
+                  {scenario.sample ? 'Fictional example' : 'Workshop draft'}
                 </div>
                 <h1>{scenario.title}</h1>
                 <p className="muted small">
-                  {scenario.context ||
-                    'Start with the people who know this work.'}
+                  <strong>{flow.object}</strong> · identified by{' '}
+                  <code>{flow.identity}</code> · {flow.nodes.length} actions
+                  across {flow.components.length} components
                 </p>
               </div>
               <div className="actions">
-                <button className="btn" onClick={exportBrief}>
-                  <Download />
-                  Export brief
-                </button>
                 <button
                   className="btn"
                   onClick={() => {
@@ -809,596 +643,792 @@ export default function Home() {
                   }}
                 >
                   <Pencil />
-                  Edit scenario
+                  Edit brief
+                </button>
+                <button
+                  className="btn"
+                  onClick={() =>
+                    download(
+                      'first-thread-flow-brief.md',
+                      scenarioMarkdown(scenario),
+                      'text/markdown',
+                    )
+                  }
+                >
+                  <Download />
+                  Brief
                 </button>
               </div>
             </div>
-            <section className="contract" aria-label="Scenario boundaries">
+            <section className="contract">
               <div>
-                <div className="eyebrow">
-                  <CircleDot size={13} />
-                  One trigger
-                </div>
+                <div className="eyebrow">Trigger / why work starts</div>
                 <p>{scenario.trigger}</p>
               </div>
               <div className="contract-arrow">
-                <ArrowRight size={22} />
+                <ArrowRight />
               </div>
               <div>
-                <div className="eyebrow">
-                  <Check size={14} />
-                  Intended outcome
-                </div>
+                <div className="eyebrow">Outcome / what must be true</div>
                 <p>{scenario.outcome}</p>
               </div>
             </section>
             <Tabs
-              className="work-tabs"
               value={tab}
-              onValueChange={(value) => setTab(String(value))}
+              onValueChange={(v) => setTab(String(v))}
+              className="work-tabs"
             >
-              <TabsList aria-label="Workshop views">
-                <TabsTrigger value="today">
-                  <span>01</span>Map today
-                </TabsTrigger>
-                <TabsTrigger value="future">
-                  <span>02</span>A better state
-                </TabsTrigger>
-                <TabsTrigger value="notes">
-                  <span>03</span>Discovery notes
+              <TabsList aria-label="Flow studio views">
+                <TabsTrigger value="map">Flow map</TabsTrigger>
+                <TabsTrigger value="capabilities">Capabilities</TabsTrigger>
+                <TabsTrigger value="rehearsal">Rehearsal</TabsTrigger>
+                <TabsTrigger value="ai">
+                  <Bot size={14} />
+                  AI designer
                 </TabsTrigger>
               </TabsList>
-              <TabsContent value="today">
-                <div className="map-layout">
-                  <div>
-                    <section
-                      className="map-panel"
-                      aria-label="Current scenario map"
+              <TabsContent value="map">
+                <div className="flow-toolbar">
+                  <div className="mode-switch">
+                    <button
+                      className={!assisted ? 'active' : ''}
+                      aria-pressed={!assisted}
+                      onClick={() => {
+                        setAssisted(false);
+                        setSelected(null);
+                      }}
                     >
-                      <div className="panel-toolbar">
-                        <div>
-                          <h2>Follow the thread</h2>
-                          <span className="muted">
-                            {scenario.steps.length} steps · {frictionCount}{' '}
-                            friction {frictionCount === 1 ? 'point' : 'points'}
-                          </span>
-                        </div>
-                        <button
-                          className="btn"
-                          disabled={scenario.steps.length >= 100}
-                          onClick={() => editStep()}
-                        >
-                          <Plus />
-                          Add step
-                        </button>
-                      </div>
-                      <div className="canvas">
-                        <div className="route">
-                          <div className="endpoint">
-                            <span className="endpoint-symbol">
-                              <CircleDot size={11} />
-                            </span>
-                            <span>Trigger / the work begins</span>
-                          </div>
-                          <div className="connector" />
-                          {scenario.steps.length === 0 ? (
-                            <div className="empty-map">
-                              <h3>What happens first?</h3>
-                              <p className="muted">
-                                Add the first person, team, or tool that
-                                responds to the trigger. Then follow what gets
-                                passed along.
-                              </p>
-                              <button
-                                className="btn primary"
-                                onClick={() => editStep()}
-                              >
-                                <Plus />
-                                Add the first step
-                              </button>
-                            </div>
-                          ) : (
-                            scenario.steps.map((s, i) => (
-                              <div key={s.id}>
-                                <button
-                                  aria-pressed={selected === s.id}
-                                  className={`step-card ${selected === s.id ? 'selected' : ''}`}
-                                  onClick={() => setSelected(s.id)}
-                                >
-                                  <span className="step-number">
-                                    {String(i + 1).padStart(2, '0')}
-                                  </span>
-                                  <div>
-                                    <h3>{s.title}</h3>
-                                    <p>{s.tool || 'Component not yet named'}</p>
-                                    {s.friction && (
-                                      <span className="friction-tag">
-                                        <AlertTriangle size={11} />
-                                        Friction to explore
-                                      </span>
-                                    )}
-                                  </div>
-                                  <ArrowRight size={15} color="#7d8b90" />
-                                </button>
-                                <span className="signal-label">
-                                  ↓{' '}
-                                  {s.outgoing ||
-                                    'Outgoing signal not yet captured'}
-                                </span>
-                                <div className="connector" />
-                              </div>
-                            ))
-                          )}
-                          <div className="endpoint">
-                            <span className="endpoint-symbol end">
-                              <Check size={12} />
-                            </span>
-                            <span>
-                              Intended outcome / validate what actually happens
-                            </span>
-                          </div>
-                        </div>
-                      </div>
-                      <div className="map-footer">
-                        <span>
-                          <CircleDot size={12} />
-                          Select a step to see the detail
-                        </span>
-                        <span>
-                          <AlertTriangle size={12} />
-                          Friction recorded in the workshop
-                        </span>
-                      </div>
-                    </section>
-                    <div className="prompt-box">
-                      <h3>What else touches this part of the work?</h3>
-                      <p>
-                        Ask about the teams, information, and experiences just
-                        outside the route. Capture them on the relevant step.
-                      </p>
-                    </div>
-                  </div>
-                  <aside
-                    className="inspector"
-                    aria-label="Selected step details"
-                  >
-                    {step ? (
-                      <>
-                        <div className="inspector-head">
-                          <div className="eyebrow">
-                            Street view / step{' '}
-                            {scenario.steps.indexOf(step) + 1}
-                          </div>
-                          <h2>{step.title}</h2>
-                          <p className="muted">
-                            The people, tools, and context behind the box.
-                          </p>
-                        </div>
-                        <div className="inspector-body">
-                          <dl>
-                            <Fact label="Tool / component" value={step.tool} />
-                            <Fact label="Who owns it?" value={step.owner} />
-                            <div className="fact-grid">
-                              <Fact label="Surface" value={step.surface} />
-                              <Fact label="Channel" value={step.channel} />
-                            </div>
-                            <Fact label="Signal in" value={step.incoming} />
-                            <Fact label="Signal out" value={step.outgoing} />
-                          </dl>
-                          {step.friction && (
-                            <div className="friction-box">
-                              <strong>Where it gets difficult</strong>
-                              <p>{step.friction}</p>
-                            </div>
-                          )}
-                          <dl>
-                            <Fact
-                              label="What else touches this?"
-                              value={step.adjacent}
-                            />
-                          </dl>
-                          <div className="evidence-note">
-                            <span className="pill">{step.evidence}</span>
-                            <p>
-                              {step.source ||
-                                'No supporting source recorded yet.'}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="inspector-foot">
-                          <button
-                            className="btn"
-                            onClick={() => editStep(step)}
-                          >
-                            <Pencil />
-                            Edit step
-                          </button>
-                          <div className="actions">
-                            <button
-                              className="btn icon"
-                              aria-label="Move step earlier"
-                              disabled={scenario.steps.indexOf(step) === 0}
-                              onClick={() =>
-                                updateScenario({
-                                  steps: moveStep(scenario.steps, step.id, -1),
-                                })
-                              }
-                            >
-                              <ArrowUp />
-                            </button>
-                            <button
-                              className="btn icon"
-                              aria-label="Move step later"
-                              disabled={
-                                scenario.steps.indexOf(step) ===
-                                scenario.steps.length - 1
-                              }
-                              onClick={() =>
-                                updateScenario({
-                                  steps: moveStep(scenario.steps, step.id, 1),
-                                })
-                              }
-                            >
-                              <ArrowDown />
-                            </button>
-                            <button
-                              className="btn icon danger"
-                              aria-label="Delete step"
-                              onClick={() => setDeleteTarget('step')}
-                            >
-                              <Trash2 />
-                            </button>
-                          </div>
-                        </div>
-                      </>
-                    ) : (
-                      <div className="inspector-body">
-                        <div className="eyebrow">Street view</div>
-                        <h2 style={{ margin: '12px 0' }}>
-                          Start with one step.
-                        </h2>
-                        <p className="muted small">
-                          Select a step to explore its owner, signals, evidence,
-                          and friction.
-                        </p>
-                      </div>
-                    )}
-                  </aside>
-                </div>
-              </TabsContent>
-              <TabsContent value="future">
-                <div className="future-grid">
-                  <section className="paper">
-                    <div className="eyebrow">
-                      State B / define the destination
-                    </div>
-                    <h2>What should be different?</h2>
-                    <p className="muted small">
-                      Describe the way this scenario should work. Treat it as a
-                      hypothesis you can challenge together.
-                    </p>
-                    <Field label="Desired future state">
-                      <textarea
-                        rows={5}
-                        value={scenario.future}
-                        onChange={(e) =>
-                          updateScenario({ future: e.target.value })
-                        }
-                        maxLength={40000}
-                        placeholder="When this trigger happens, what should people experience instead?"
-                      />
-                    </Field>
-                    <Field label="Why do we think this would help?">
-                      <textarea
-                        rows={3}
-                        value={scenario.hypothesis}
-                        onChange={(e) =>
-                          updateScenario({ hypothesis: e.target.value })
-                        }
-                        maxLength={40000}
-                        placeholder="If we change… we expect… because…"
-                      />
-                    </Field>
-                    <Field label="Open questions">
-                      <textarea
-                        rows={4}
-                        value={scenario.questions}
-                        onChange={(e) =>
-                          updateScenario({ questions: e.target.value })
-                        }
-                        maxLength={40000}
-                        placeholder="What would we need to learn before committing?"
-                      />
-                    </Field>
-                  </section>
-                  <section className="paper">
-                    <div className="eyebrow">A → B / one first move</div>
-                    <h2>Choose a change we can test.</h2>
-                    <p className="muted small">
-                      A proposal for a workshop experiment. No changes are made
-                      to any live system.
-                    </p>
-                    <Field label="Smallest useful change">
-                      <textarea
-                        value={scenario.firstMove}
-                        onChange={(e) =>
-                          updateScenario({ firstMove: e.target.value })
-                        }
-                        maxLength={40000}
-                        placeholder="What is one handoff, signal, or unserved need we could start with?"
-                      />
-                    </Field>
-                    <Field
-                      label="Evidence of success"
-                      hint="Name the measure, baseline to check, and how you will review the result."
+                      Current flow
+                    </button>
+                    <button
+                      className={assisted ? 'active' : ''}
+                      aria-pressed={assisted}
+                      onClick={() => {
+                        if (
+                          !scenario.proposed &&
+                          !update({ proposed: structuredClone(scenario.flow) })
+                        )
+                          return;
+                        setAssisted(true);
+                        setSelected(null);
+                      }}
                     >
-                      <textarea
-                        value={scenario.measure}
-                        onChange={(e) =>
-                          updateScenario({ measure: e.target.value })
-                        }
-                        maxLength={40000}
-                      />
-                    </Field>
-                    <Field label="Who will own the next step?">
-                      <input
-                        value={scenario.owner}
-                        onChange={(e) =>
-                          updateScenario({ owner: e.target.value })
-                        }
-                        maxLength={40000}
-                      />
-                    </Field>
-                    <Field label="Guardrail / fallback">
-                      <textarea
-                        value={scenario.guardrail}
-                        onChange={(e) =>
-                          updateScenario({ guardrail: e.target.value })
-                        }
-                        maxLength={40000}
-                        placeholder="Keep the pilot bounded. What happens if it does not help?"
-                      />
-                    </Field>
-                  </section>
-                </div>
-              </TabsContent>
-              <TabsContent value="notes">
-                <section className="paper">
-                  <div className="eyebrow">
-                    Discovery / listen before solving
+                      Proposed flow <span>AI</span>
+                    </button>
                   </div>
-                  <h2>What did we hear?</h2>
-                  <p className="muted small">
-                    Paste relevant interview excerpts or type notes. Use them to
-                    build the map manually; this prototype does not extract
-                    steps with AI. Notes stay in this browser and in files you
-                    export.
-                  </p>
-                  <Field label="Source notes">
-                    <textarea
-                      rows={12}
-                      value={scenario.notes}
-                      onChange={(e) =>
-                        updateScenario({ notes: e.target.value })
+                  <div className="actions">
+                    <button
+                      className="btn"
+                      disabled={flow.nodes.length >= 100}
+                      onClick={() => openNode()}
+                    >
+                      <Plus />
+                      Add action
+                    </button>
+                    <button
+                      className="btn"
+                      disabled={
+                        flow.nodes.length < 2 || flow.edges.length >= 300
                       }
-                      maxLength={40000}
-                      placeholder="Walk me through the last time this happened…"
-                    />
-                  </Field>
-                  <div className="prompt-box">
-                    <h3>Prompts for the conversation</h3>
-                    <p>
-                      What starts the work? Who receives it next? What context
-                      travels with it? Where does it wait? What happens in an
-                      exception? How do you know the outcome was achieved?
-                    </p>
+                      onClick={() => openEdge()}
+                    >
+                      <GitBranch />
+                      Connect signal
+                    </button>
+                  </div>
+                </div>
+                {assisted && (
+                  <div className="inline-note ai-note">
+                    <Bot size={16} />A separate design draft. AI candidates have
+                    contracts and review gates; business actions are not
+                    executed.
+                  </div>
+                )}
+                <FlowMap
+                  flow={flow}
+                  assisted={assisted}
+                  onSelect={setSelected}
+                />
+                {issues.length > 0 && (
+                  <details className="issues">
+                    <summary>
+                      {issues.length} definition{' '}
+                      {issues.length === 1 ? 'gap' : 'gaps'} to resolve before
+                      rehearsal
+                    </summary>
+                    <ul>
+                      {issues.map((i) => (
+                        <li key={i}>{i}</li>
+                      ))}
+                    </ul>
+                  </details>
+                )}
+                <section className="signal-section">
+                  <div className="section-heading">
+                    <div>
+                      <div className="eyebrow">
+                        What travels between actions
+                      </div>
+                      <h2>Signals carry the context forward.</h2>
+                    </div>
+                    <span className="small muted">
+                      Select a connection to edit its rule
+                    </span>
+                  </div>
+                  <div className="signal-list">
+                    {flow.edges.map((e) => (
+                      <button
+                        key={e.id}
+                        onClick={() => openEdge(e)}
+                        className="signal-row"
+                      >
+                        <code>{e.signal}</code>
+                        <span>
+                          {flow.nodes.find((n) => n.id === e.from)?.title}
+                          <ArrowRight size={13} />
+                          {flow.nodes.find((n) => n.id === e.to)?.title}
+                        </span>
+                        <span className="pill">{e.when}</span>
+                      </button>
+                    ))}
                   </div>
                 </section>
+              </TabsContent>
+              <TabsContent value="capabilities">
+                <div className="capability-intro">
+                  <div className="eyebrow">
+                    Business ability → component → action
+                  </div>
+                  <h2>Keep the ability separate from the tool.</h2>
+                  <p className="muted">
+                    These capabilities can exist in any digital business. The
+                    components below are this flow’s implementation.
+                  </p>
+                </div>
+                <div className="capability-grid">
+                  {[
+                    ...new Set(
+                      flow.nodes.map((n) => n.capability || 'To define'),
+                    ),
+                  ].map((cap) => (
+                    <section className="paper capability-card" key={cap}>
+                      <div className="eyebrow">
+                        <Layers size={14} />
+                        {cap}
+                      </div>
+                      {flow.nodes
+                        .filter((n) => (n.capability || 'To define') === cap)
+                        .map((n) => (
+                          <button key={n.id} onClick={() => setSelected(n.id)}>
+                            <strong>{n.title}</strong>
+                            <span>
+                              {
+                                flow.components.find(
+                                  (c) => c.id === n.componentId,
+                                )?.name
+                              }
+                              <ArrowRight size={13} />
+                            </span>
+                          </button>
+                        ))}
+                    </section>
+                  ))}
+                </div>
+                <div className="section-heading">
+                  <div>
+                    <div className="eyebrow">
+                      Who or what can perform the work
+                    </div>
+                    <h2>Reusable components</h2>
+                  </div>
+                </div>
+                <div className="component-grid">
+                  {flow.components.map((c) => (
+                    <button
+                      className="component-card"
+                      key={c.id}
+                      onClick={() => {
+                        setDraftComponent(c);
+                        setModal('component');
+                      }}
+                    >
+                      <span className="pill">{c.kind}</span>
+                      <h3>{c.name}</h3>
+                      <p>{c.responsibility || 'Responsibility to define'}</p>
+                    </button>
+                  ))}
+                </div>
+              </TabsContent>
+              <TabsContent value="rehearsal">
+                <Rehearsal
+                  key={`${scenario.id}-${JSON.stringify(scenario.flow)}-${JSON.stringify(scenario.proposed)}`}
+                  baseline={scenario.flow}
+                  proposed={scenario.proposed}
+                />
+              </TabsContent>
+              <TabsContent value="ai">
+                <AIDesigner
+                  key={scenario.id}
+                  scenario={scenario}
+                  onNotes={(notes) => {
+                    update({ notes });
+                  }}
+                  onApply={(proposed) => {
+                    const ok = update({ proposed });
+                    if (ok) {
+                      setAssisted(true);
+                      setTab('map');
+                      setNotice(
+                        'AI proposal added as a separate draft. Current flow preserved.',
+                      );
+                    }
+                    return ok;
+                  }}
+                />
               </TabsContent>
             </Tabs>
             <div className="workspace-footer">
               <span>
                 {scenario.sample
-                  ? 'Illustrative data. All example details are assumptions.'
-                  : 'Workshop draft. Validate the map with someone who does this work.'}
+                  ? 'All examples, timings, and outcome records are fictional workshop assumptions.'
+                  : 'Validate this flow and its assumptions with the people responsible for the work.'}
               </span>
               <div className="actions">
                 <button className="text-link" onClick={duplicate}>
-                  Duplicate scenario
+                  Duplicate
                 </button>
                 <button
                   className="text-link"
                   disabled={workspace.scenarios.length <= 1}
-                  onClick={() => setDeleteTarget('scenario')}
+                  onClick={() => setRemoveTarget('scenario')}
                 >
-                  Delete scenario
+                  Delete flow
                 </button>
                 <a href={REPO} target="_blank" rel="noreferrer">
                   GitHub ↗
                 </a>
               </div>
             </div>
-            <div className="actions mobile-transfer" style={{ marginTop: 15 }}>
-              <button className="btn quiet" onClick={exportWorkspace}>
+            <div className="mobile-transfers actions">
+              <button className="btn" onClick={exportWorkspace}>
                 <Download />
                 Export workspace
               </button>
-              <button
-                className="btn quiet"
-                onClick={() => fileRef.current?.click()}
-              >
+              <button className="btn" onClick={() => file.current?.click()}>
                 <Upload />
-                Import workspace
+                Import
               </button>
             </div>
           </main>
         </div>
       )}
       <output
+        className={notice ? 'studio-notice' : 'sr-only'}
         aria-live="polite"
-        className={notice ? 'status-banner' : 'sr-only'}
       >
         {notice}
+        {notice && (
+          <button aria-label="Dismiss notice" onClick={() => setNotice('')}>
+            ×
+          </button>
+        )}
       </output>
+      <Sheet
+        open={!!node}
+        onOpenChange={(open) => {
+          if (!open) setSelected(null);
+        }}
+      >
+        <SheetContent className="action-sheet">
+          {node && (
+            <>
+              <div className="eyebrow">
+                Action contract / {assisted ? 'proposed' : 'current'}
+              </div>
+              <SheetTitle>{node.title}</SheetTitle>
+              <SheetDescription>
+                {node.capability} ·{' '}
+                {flow.components.find((c) => c.id === node.componentId)?.name}
+              </SheetDescription>
+              <div className="contract-detail">
+                <dl>
+                  {[
+                    ['Case state after', node.state],
+                    ['Required inputs', node.inputs.join(', ')],
+                    ['Produced context', node.outputs.join(', ')],
+                    ['Surface / channel', `${node.surface} / ${node.channel}`],
+                    ['Friction', node.friction],
+                    ['Evidence', `${node.evidence}: ${node.source}`],
+                  ].map(([t, v]) => (
+                    <div key={t}>
+                      <dt>{t}</dt>
+                      <dd>{v || 'Not yet defined'}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div className="timing-pair">
+                  <span>
+                    <strong>{node.minutes}</strong> handling min
+                  </span>
+                  <span>
+                    <strong>{node.wait}</strong> waiting min
+                  </span>
+                </div>
+                {node.ai && (
+                  <div className="delegation-box">
+                    <div className="eyebrow">
+                      <Bot size={14} />
+                      AI delegation candidate
+                    </div>
+                    <h3>{node.instruction || 'Define a specific AI task'}</h3>
+                    <p>
+                      <strong>Output contract</strong>
+                      <br />
+                      {node.outputContract || 'Not defined'}
+                    </p>
+                    <p>
+                      <strong>Review</strong>
+                      <br />
+                      {node.review
+                        ? 'Human approval before output is passed onward'
+                        : 'No review gate configured'}
+                    </p>
+                    <p>
+                      <strong>Fallback</strong>
+                      <br />
+                      {node.fallback || 'Not defined'}
+                    </p>
+                    <p className="small">
+                      Proposed handling: {node.proposedMinutes} min, including
+                      review. Assumption to validate.
+                    </p>
+                  </div>
+                )}
+              </div>
+              <div className="actions">
+                <button className="btn primary" onClick={() => openNode(node)}>
+                  <Pencil />
+                  Edit action
+                </button>
+                <button
+                  className="btn"
+                  onClick={() => {
+                    updateFlow({ ...flow, start: node.id });
+                    setNotice('Trigger now enters this action.');
+                  }}
+                >
+                  Set as start
+                </button>
+                <button
+                  className="btn icon danger"
+                  aria-label="Delete selected action"
+                  onClick={() => setRemoveTarget('node')}
+                >
+                  <Trash2 />
+                </button>
+              </div>
+            </>
+          )}
+        </SheetContent>
+      </Sheet>
       <Dialog
         open={modal !== null}
         onOpenChange={(open) => {
           if (!open) setModal(null);
         }}
       >
-        <DialogContent className="modal">
+        <DialogContent className="modal studio-modal">
           <DialogTitle>
-            {modal === 'step'
-              ? scenario.steps.some((s) => s.id === stepDraft?.id)
-                ? 'Edit this step'
-                : 'Add a step to the thread'
-              : modal === 'new'
-                ? 'Start with one scenario'
-                : 'Edit the scenario'}
+            {modal === 'new'
+              ? 'Define a business flow'
+              : modal === 'brief'
+                ? 'Business flow brief'
+                : modal === 'node'
+                  ? 'Define the action contract'
+                  : modal === 'edge'
+                    ? 'Define the signal connection'
+                    : 'Define the component'}
           </DialogTitle>
           <DialogDescription>
-            {modal === 'step'
-              ? 'Capture what happens and what gets passed along. Leave unknown details blank.'
-              : 'Pair one trigger with one intended outcome. Add the route after you have agreed on those boundaries.'}
+            {modal === 'node'
+              ? 'Name the capability, the performer, and what must travel with the work.'
+              : modal === 'edge'
+                ? 'A signal connects two actions. Its condition determines which case follows it.'
+                : 'Use the vocabulary of this business. The underlying model stays the same.'}
           </DialogDescription>
           {notice && <output className="notice">{notice}</output>}
-          {modal === 'step' && stepDraft ? (
-            <form key={stepDraft.id} onSubmit={saveStep}>
+          {(modal === 'new' || modal === 'brief') && (
+            <form key={modal + scenario.id} onSubmit={saveBrief}>
               <div className="form-grid">
-                <FormInput
-                  label="What happens?"
+                <Input
+                  label="Flow name"
                   name="title"
-                  value={stepDraft.title === 'New step' ? '' : stepDraft.title}
+                  value={modal === 'brief' ? scenario.title : ''}
                   required
-                  full
                 />
-                <FormInput
-                  label="Tool / component"
-                  name="tool"
-                  value={stepDraft.tool}
+                <Input
+                  label="Industry / business context"
+                  name="industry"
+                  value={modal === 'brief' ? scenario.industry : ''}
                 />
-                <FormInput label="Owner" name="owner" value={stepDraft.owner} />
-                <FormInput
+                <Input
+                  label="Business case / object"
+                  name="object"
+                  value={modal === 'brief' ? flow.object : ''}
+                  hint="Booking, referral, order, request…"
+                />
+                <Input
+                  label="Identity field"
+                  name="identity"
+                  value={modal === 'brief' ? flow.identity : 'caseId'}
+                />
+              </div>
+              <Input
+                label="Trigger"
+                name="trigger"
+                value={modal === 'brief' ? scenario.trigger : ''}
+                required
+                area
+              />
+              <Input
+                label="Intended outcome and its evidence"
+                name="outcome"
+                value={modal === 'brief' ? scenario.outcome : ''}
+                required
+                area
+              />
+              <Input
+                label="Organization / context"
+                name="context"
+                value={modal === 'brief' ? scenario.context : ''}
+              />
+              <Input
+                label="Discovery notes"
+                name="notes"
+                value={modal === 'brief' ? scenario.notes : ''}
+                area
+              />
+              <details>
+                <summary>Future state, pilot, and questions</summary>
+                {[
+                  ['Desired future state', 'future'],
+                  ['First move', 'firstMove'],
+                  ['Hypothesis', 'hypothesis'],
+                  ['Success measure', 'measure'],
+                  ['Accountable owner', 'owner'],
+                  ['Fallback / guardrail', 'guardrail'],
+                  ['Open questions', 'questions'],
+                ].map(([label, name]) => (
+                  <Input
+                    key={name}
+                    label={label}
+                    name={name}
+                    value={
+                      modal === 'brief'
+                        ? typeof scenario[name as keyof Scenario] === 'string'
+                          ? (scenario[name as keyof Scenario] as string)
+                          : ''
+                        : ''
+                    }
+                    area
+                  />
+                ))}
+              </details>
+              <div className="actions">
+                <button className="btn primary" type="submit">
+                  Save flow
+                  <ArrowRight />
+                </button>
+              </div>
+            </form>
+          )}
+          {modal === 'node' && draftNode && (
+            <form key={draftNode.id} onSubmit={saveNode}>
+              <Input
+                label="Action name"
+                name="title"
+                value={draftNode.title === 'New action' ? '' : draftNode.title}
+                required
+              />
+              <div className="form-grid">
+                <Input
+                  label="Business capability"
+                  name="capability"
+                  value={draftNode.capability}
+                  hint="For example: Understand, Arrange, Authorize"
+                  required
+                />
+                <Field label="Action kind">
+                  <NativeSelect name="kind" defaultValue={draftNode.kind}>
+                    <option value="action">Action</option>
+                    <option value="decision">Decision</option>
+                    <option value="outcome">Terminal outcome</option>
+                  </NativeSelect>
+                </Field>
+                <Field label="Component performing the action">
+                  <NativeSelect
+                    name="componentId"
+                    defaultValue={draftNode.componentId}
+                  >
+                    <option value="">Create a new component below</option>
+                    {flow.components.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="New component kind">
+                  <NativeSelect name="actorKind" defaultValue="person">
+                    <option value="person">Person / team</option>
+                    <option value="system">System / service</option>
+                    <option value="agent">AI agent</option>
+                  </NativeSelect>
+                </Field>
+                <Input
+                  label="New component name (if needed)"
+                  name="componentName"
+                />
+                <Input
+                  label="Case state after this action"
+                  name="state"
+                  value={draftNode.state}
+                />
+                <Field label="Terminal outcome status">
+                  <NativeSelect name="result" defaultValue={draftNode.result}>
+                    <option value="met">Intended outcome met</option>
+                    <option value="pending">Waiting / not complete</option>
+                    <option value="not-met">Outcome not met</option>
+                  </NativeSelect>
+                </Field>
+                <Field label="Map lane">
+                  <NativeSelect name="lane" defaultValue={draftNode.lane}>
+                    <option value="0">Experience & fulfillment</option>
+                    <option value="1">Systems & coordination</option>
+                    <option value="2">People & exceptions</option>
+                  </NativeSelect>
+                </Field>
+                <Field label="Map column (0–150)">
+                  <input
+                    type="number"
+                    name="column"
+                    min="0"
+                    max="150"
+                    step="1"
+                    defaultValue={draftNode.column}
+                  />
+                </Field>
+              </div>
+              <div className="form-grid">
+                <Input
+                  label="Required input keys"
+                  name="inputs"
+                  value={draftNode.inputs.join(', ')}
+                  hint="Comma-separated field keys; no spaces inside keys"
+                />
+                <Input
+                  label="Produced context keys"
+                  name="outputs"
+                  value={draftNode.outputs.join(', ')}
+                />
+                <Input
                   label="Surface"
                   name="surface"
-                  value={stepDraft.surface}
-                  hint="Where the interaction takes place"
+                  value={draftNode.surface}
                 />
-                <FormInput
+                <Input
                   label="Channel"
                   name="channel"
-                  value={stepDraft.channel}
-                  hint="For example: email, phone, web"
+                  value={draftNode.channel}
                 />
-                <FormInput
-                  label="Signal in"
-                  name="incoming"
-                  value={stepDraft.incoming}
-                />
-                <FormInput
-                  label="Signal out"
-                  name="outgoing"
-                  value={stepDraft.outgoing}
-                />
-                <FormInput
-                  label="Where does it get difficult?"
-                  name="friction"
-                  value={stepDraft.friction}
-                  multiline
-                  full
-                />
-                <FormInput
-                  label="What else touches this?"
-                  name="adjacent"
-                  value={stepDraft.adjacent}
-                  hint="Adjacent teams, data, or experiences"
-                  full
-                />
-                <Field label="Evidence status" full>
+                <Field label="Handling minutes (assumed)">
+                  <input
+                    name="minutes"
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="any"
+                    defaultValue={draftNode.minutes}
+                  />
+                </Field>
+                <Field label="Waiting minutes (assumed)">
+                  <input
+                    name="wait"
+                    type="number"
+                    min="0"
+                    max="100000"
+                    step="any"
+                    defaultValue={draftNode.wait}
+                  />
+                </Field>
+              </div>
+              <Input
+                label="Friction"
+                name="friction"
+                value={draftNode.friction}
+                area
+              />
+              <div className="form-grid">
+                <Field label="Evidence status">
                   <NativeSelect
                     name="evidence"
-                    defaultValue={stepDraft.evidence}
-                    className="w-full"
+                    defaultValue={draftNode.evidence}
                   >
                     <option>Assumption</option>
                     <option>Reported</option>
                     <option>Observed</option>
                   </NativeSelect>
                 </Field>
-                <FormInput
-                  label="Source / what to validate"
+                <Input
+                  label="Evidence source"
                   name="source"
-                  value={stepDraft.source}
-                  multiline
-                  full
+                  value={draftNode.source}
                 />
               </div>
+              <div className="delegation-form">
+                <div className="eyebrow">AI delegation</div>
+                <Field label="Use AI as a candidate for this action?">
+                  <NativeSelect name="ai" defaultValue={String(draftNode.ai)}>
+                    <option value="false">No — current performer</option>
+                    <option value="true">Yes — define a bounded task</option>
+                  </NativeSelect>
+                </Field>
+                <Input
+                  label="Task for the AI"
+                  name="instruction"
+                  value={draftNode.instruction}
+                  area
+                />
+                <Input
+                  label="Expected output and acceptance check"
+                  name="outputContract"
+                  value={draftNode.outputContract}
+                  area
+                />
+                <Input
+                  label="Fallback owner / action"
+                  name="fallback"
+                  value={draftNode.fallback}
+                />
+                <div className="form-grid">
+                  <Field label="Human review">
+                    <NativeSelect
+                      name="review"
+                      defaultValue={String(draftNode.review)}
+                    >
+                      <option value="true">
+                        Required before output is emitted
+                      </option>
+                      <option value="false">Not required in this draft</option>
+                    </NativeSelect>
+                  </Field>
+                  <Field label="Proposed handling minutes, including review">
+                    <input
+                      name="proposedMinutes"
+                      type="number"
+                      min="0"
+                      max="100000"
+                      step="any"
+                      defaultValue={draftNode.proposedMinutes}
+                    />
+                  </Field>
+                </div>
+              </div>
               <div className="actions">
-                <button
-                  type="button"
-                  className="btn"
-                  onClick={() => setModal(null)}
-                >
-                  Cancel
-                </button>
                 <button type="submit" className="btn primary">
-                  Save step
-                  <ArrowRight />
+                  Save action
+                  <Check />
                 </button>
               </div>
             </form>
-          ) : (
-            (modal === 'new' || modal === 'brief') && (
-              <form key={modal + scenario.id} onSubmit={saveBrief}>
-                <FormInput
-                  label="Scenario name"
-                  name="title"
-                  value={modal === 'brief' ? scenario.title : ''}
-                  required
-                />
-                <FormInput
-                  label="Who / where is this happening?"
-                  name="context"
-                  value={modal === 'brief' ? scenario.context : ''}
-                />
-                <FormInput
-                  label="One trigger"
-                  name="trigger"
-                  value={modal === 'brief' ? scenario.trigger : ''}
-                  hint="The specific event or condition that starts the work"
-                  required
-                  multiline
-                />
-                <FormInput
-                  label="One intended outcome"
-                  name="outcome"
-                  value={modal === 'brief' ? scenario.outcome : ''}
-                  hint="The result you want this scenario to achieve"
-                  required
-                  multiline
-                />
-                <FormInput
-                  label="Discovery notes (optional)"
-                  name="notes"
-                  value={modal === 'brief' ? scenario.notes : ''}
-                  hint="Manual notes or relevant excerpts; no automatic extraction"
-                  multiline
-                />
-                <div className="actions">
+          )}
+          {modal === 'edge' && draftEdge && (
+            <form key={draftEdge.id} onSubmit={saveEdge}>
+              <div className="form-grid">
+                <Field label="From action">
+                  <NativeSelect name="from" defaultValue={draftEdge.from}>
+                    {flow.nodes.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.title}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+                <Field label="To action">
+                  <NativeSelect name="to" defaultValue={draftEdge.to}>
+                    {flow.nodes.map((n) => (
+                      <option key={n.id} value={n.id}>
+                        {n.title}
+                      </option>
+                    ))}
+                  </NativeSelect>
+                </Field>
+              </div>
+              <Input
+                label="Signal / event name"
+                name="signal"
+                value={draftEdge.signal}
+                required
+                hint="For example: context.assembled, referral.acknowledged"
+              />
+              <Field label="Condition">
+                <NativeSelect name="when" defaultValue={draftEdge.when}>
+                  <option value="always">Always</option>
+                  <option value="ready">Context is ready</option>
+                  <option value="not-ready">Context is incomplete</option>
+                  <option value="exception">
+                    Case needs exception handling
+                  </option>
+                  <option value="standard">
+                    Case follows the standard route
+                  </option>
+                </NativeSelect>
+              </Field>
+              <p className="small muted">
+                These explicit conditions drive the rehearsal cases. They are a
+                small prototype vocabulary, not a full policy language.
+              </p>
+              <div className="actions">
+                <button className="btn primary" type="submit">
+                  Save signal
+                </button>
+                {flow.edges.some((e) => e.id === draftEdge.id) && (
                   <button
                     type="button"
-                    className="btn"
-                    onClick={() => setModal(null)}
+                    className="btn danger"
+                    onClick={() => setRemoveTarget('edge')}
                   >
-                    Cancel
+                    Delete signal
                   </button>
-                  <button type="submit" className="btn primary">
-                    {modal === 'new' ? 'Create scenario' : 'Save scenario'}
-                    <ArrowRight />
-                  </button>
-                </div>
-              </form>
-            )
+                )}
+              </div>
+            </form>
+          )}
+          {modal === 'component' && draftComponent && (
+            <form key={draftComponent.id} onSubmit={saveComponent}>
+              <Input
+                label="Component name"
+                name="name"
+                value={draftComponent.name}
+                required
+              />
+              <Field label="Component kind">
+                <NativeSelect name="kind" defaultValue={draftComponent.kind}>
+                  <option value="system">System / service</option>
+                  <option value="person">Person / team</option>
+                  <option value="agent">Agent</option>
+                </NativeSelect>
+              </Field>
+              <Input
+                label="Responsibility"
+                name="responsibility"
+                value={draftComponent.responsibility}
+                area
+              />
+              <button className="btn primary" type="submit">
+                Save component
+              </button>
+            </form>
           )}
         </DialogContent>
       </Dialog>
@@ -1409,11 +1439,12 @@ export default function Home() {
         }}
       >
         <AlertDialogContent>
-          <AlertDialogTitle>Open this workspace?</AlertDialogTitle>
+          <AlertDialogTitle>Replace this browser’s workspace?</AlertDialogTitle>
           <AlertDialogDescription>
-            This file contains {pendingImport?.scenarios.length} scenarios and
-            company notes. It will replace the workspace in this browser. Export
-            your current work first if you want to keep it.
+            The incoming workspace has {pendingImport?.scenarios.length} flows
+            and company notes. Export current work first to keep a backup.
+            Version 1 files are migrated without discarding their original
+            notes.
           </AlertDialogDescription>
           <div className="actions">
             <button className="btn" onClick={exportWorkspace}>
@@ -1425,16 +1456,13 @@ export default function Home() {
             <button
               className="btn primary"
               onClick={() => {
-                if (!pendingImport) return;
-                setWorkspace(pendingImport);
-                setSelected(
-                  pendingImport.scenarios.find(
-                    (s) => s.id === pendingImport.activeId,
-                  )?.steps[0]?.id || null,
-                );
-                setStorageBlocked(false);
-                setPendingImport(null);
-                setNotice('Workspace imported.');
+                if (pendingImport && commit(pendingImport)) {
+                  setPendingImport(null);
+                  setBlocked(false);
+                  setAssisted(false);
+                  setSelected(null);
+                  setNotice('Workspace imported.');
+                }
               }}
             >
               Replace workspace
@@ -1443,25 +1471,25 @@ export default function Home() {
         </AlertDialogContent>
       </AlertDialog>
       <AlertDialog
-        open={!!deleteTarget}
+        open={!!removeTarget}
         onOpenChange={(open) => {
-          if (!open) setDeleteTarget(null);
+          if (!open) setRemoveTarget(null);
         }}
       >
         <AlertDialogContent>
-          <AlertDialogTitle>Delete this {deleteTarget}?</AlertDialogTitle>
+          <AlertDialogTitle>Delete this {removeTarget}?</AlertDialogTitle>
           <AlertDialogDescription>
-            {deleteTarget === 'step'
-              ? `“${step?.title}” will be removed from this route.`
-              : `“${scenario.title}” and its notes will be removed.`}{' '}
-            This cannot be undone. An exported workspace keeps a backup.
+            {removeTarget === 'node'
+              ? 'The action and its connected signals will be removed.'
+              : 'This item will be removed from the workspace.'}{' '}
+            Export a backup if you need to keep it.
           </AlertDialogDescription>
           <div className="actions">
-            <button className="btn" onClick={() => setDeleteTarget(null)}>
+            <button className="btn" onClick={() => setRemoveTarget(null)}>
               Cancel
             </button>
             <button className="btn danger" onClick={remove}>
-              Delete {deleteTarget}
+              Delete
             </button>
           </div>
         </AlertDialogContent>
