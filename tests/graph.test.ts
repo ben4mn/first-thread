@@ -157,15 +157,20 @@ await test('AI validation rejects ambiguous routing and impossible input contrac
       ),
     /exclusive/,
   );
-  const missing = structuredClone(examples[0].flow);
-  missing.nodes.find((n) => n.id === 'confirm')!.inputs = ['unknownReceipt'];
-  assert.throws(
-    () =>
-      parseProposal(
-        JSON.stringify({ summary: 'Draft', assumptions: [], flow: missing }),
-      ),
-    /Input contract/,
-  );
+  for (const id of ['confirm', 'complete']) {
+    const missing = structuredClone(examples[0].flow);
+    missing.nodes.find((n) => n.id === id)!.inputs = ['unknownReceipt'];
+    assert.throws(
+      () =>
+        parseProposal(
+          JSON.stringify({ summary: 'Draft', assumptions: [], flow: missing }),
+        ),
+      /Input contract/,
+    );
+  }
+  const negative = structuredClone(examples[0].flow);
+  negative.nodes.find((n) => n.id === 'complete')!.result = 'not-met';
+  assert.deepEqual(flowIssues(negative), []);
 });
 await test('migration refreshes only untouched demo defaults and preserves custom company text', () => {
   const old = legacyInitial();

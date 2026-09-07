@@ -332,7 +332,11 @@ export function flowIssues(flow: Flow): string[] {
       const terminalNode = flow.nodes.find(
         (n) => n.id === run.trace.at(-1)?.nodeId,
       );
-      if (run.status === 'blocked' && terminalNode?.kind !== 'outcome')
+      const completedNegativeOutcome =
+        terminalNode?.kind === 'outcome' &&
+        terminalNode.result === 'not-met' &&
+        run.trace.at(-1)?.status === 'done';
+      if (run.status === 'blocked' && !completedNegativeOutcome)
         issues.push(
           `Case ${ready ? 'ready' : 'incomplete'}/${exception ? 'exception' : 'standard'}: ${run.terminal}.`,
         );
