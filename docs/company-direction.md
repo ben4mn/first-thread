@@ -1,16 +1,16 @@
 # Make the path to better outcomes visible.
 
-Working company direction · September 7, 2026 · Draft for Ben and Paul
+Working company direction · September 7, 2026 · Revised draft for Ben and Paul
 
 This is a starting point for discussion. The name, language, business model, and product boundaries remain open. The September 6 conversation guides the first prototype; the earlier conversation supplies the longer ambition.
 
 ## Vision
 
-A world where people can understand how their organization creates value, see what a better future could look like, and make that future happen.
+People can see how their business works, shape how it should work, and continuously improve it with evidence.
 
 ## Mission
 
-Help teams map how work happens, define the outcome they want, and move toward a better way of operating—one scenario at a time.
+Help digital businesses understand how work flows, improve the outcomes it produces, and delegate the right actions to people, software, and AI.
 
 ## What we believe
 
@@ -66,3 +66,14 @@ The long-term ambition is a direction for learning. It is not a claim that this 
 Choose one real scenario. Map it together. Mark the places where the participants disagree or do not know. Describe a better outcome and one possible future route. End with one experiment, an owner, and the evidence that would tell us whether it helped.
 
 Then workshop the company direction: keep one sentence, change one sentence, and identify the assumption that matters most to test next.
+
+
+## The cross-industry thesis
+
+The portable product is a shared operating model, not a fixed set of industry steps or software integrations. A business case has identity and changing state. Components provide capabilities; actions apply those capabilities; signals carry context; explicit decisions determine routes; outcome receipts show whether the intended value was delivered.
+
+Travel, hospital administration, and commerce provide different vocabulary, permissions, policies, and evidence requirements. Those differences should be represented in the model, not hidden by generic automation.
+
+An AI layer can help interpret discovery, assemble context, and prepare proposed actions. The surrounding orchestration establishes inputs, permitted work, acceptance checks, human decisions, fallback, and evidence. Faster handling is a hypothesis to test alongside quality, waiting, rework, and actual completion.
+
+The prototype now makes definition and rehearsal useful across industries and provides a structured AI design connection. Live business execution remains a later, separately validated layer.

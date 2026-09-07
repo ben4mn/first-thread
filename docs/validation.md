@@ -1,24 +1,25 @@
-# Validation · September 7, 2026
+# Validation · version 0.2 · September 7, 2026
 
-## Checks performed
+## Performed
 
-- Eight automated domain tests pass: custom workspace round trip; invalid import rejection; duplicate identifiers, malformed evidence, and size constraints; reorder boundaries and immutability; complete Markdown handoff; empty real-scenario creation; UUID generation on plain HTTP local-network origins; and consistent UTF-8 byte limits across saved work and exports.
-- TypeScript checking passes.
-- Application, domain, and test lint passes. Generated UI primitives remain unchanged and are outside the lint command.
-- The Pages production build passes. A post-build check verifies the entry document, JavaScript, stylesheet, and favicon at the correct `/first-thread/` asset paths.
-- The local development route returns HTTP 200. The production static build is also checked over HTTP at its repository subpath.
-- The public deployment is published by the repository's GitHub Actions workflow, which repeats tests, type checking, lint, and the Pages build.
+- 24 automated tests cover legacy workspace round trips; v2 migration and 100-step reloads; independent current/proposed graphs; current Markdown exports; graph references and estimates; input contracts; case identity; conditional routing; explicit acceptance before confirmation; incomplete outcomes; approval, rejection, human fallback, and cycle stopping; AI proposal validation; and local API origin/configuration/provider behavior.
+- TypeScript and application/domain/test lint pass.
+- The production Pages build passes. Post-build validation checks the entry document, stylesheet, JavaScript, and favicon under the repository base path.
+- Local development is served from the same Vite browser entry as production. Its HTTP entry responds successfully.
+- GitHub Actions repeats automated checks before publication. The published static assets are verified against the local build.
 
-Browser interaction automation and screenshot-based visual review were not performed in this build. The first workshop remains the test of whether the workflow and vocabulary fit real discovery.
+The API service tests use controlled provider responses. No live paid model call was made because the environment did not have an API key and model configured. The test does not establish that a particular model/account supports the supplied request.
 
-## Runtime boundary
+Browser interaction automation and screenshot review were not performed. Use the workshop to test the clarity of the map, vocabulary, and controls with Ben and Paul.
 
-GitHub Pages receives the static browser bundle only. It uses the same `Workshop` React component as local development. It has no server endpoints, system connectors, AI calls, or shared persistence. Input text is rendered as React text, not inserted as HTML. Imported workspaces are validated before the user can replace current work.
+## Runtime boundaries
 
-The supplied scaffold's npm audit reports 11 dependency advisories (8 high, 2 moderate, 1 low), affecting development/server/image-processing packages including Vinext, Vite, React Server DOM, and Cloudflare tooling. Those server and image-processing runtimes are not deployed to Pages. The lockfile is retained rather than applying broad breaking upgrades. Review and update the scaffold dependencies before turning this workshop into a server-backed product.
+The public app performs no live inference or external business actions. It saves locally and exports files. The optional local AI service makes a structured-output design request, validates it, and returns a proposed flow. It has no business-action tools. Only the user can apply the proposal, and it cannot replace the current graph or assert observed evidence.
 
-## Limits to exercise together
+Rehearsal is deterministic. Confidence, failure, timing, acceptance, and completion are hypothetical case assumptions. Human review is a simulated acknowledgement, not authenticated authorization or examination of an actual generated artifact. Failure and uncertainty pause for explicit simulated human takeover before outputs are emitted.
 
-Use one editing tab per browser. Export before moving between local and hosted versions, changing devices, or replacing a workspace. Persistence is not a shared collaboration service.
+The engine supports single-token conditional routing, not parallel joins, arbitrary policy expressions, durable retries, or live event processing. It halts on missing input, ambiguity, cycles, and review rejection. Handling and waiting are displayed separately; they are not measured improvements.
 
-The map records a single ordered route. Handoff signal names are entered independently so missing or inconsistent context remains visible. There is no automatic inference or connectivity validation. “A better state” is a written hypothesis and first-move plan.
+## Dependency context
+
+The retained scaffold's npm audit reports 11 dependency advisories (8 high, 2 moderate, 1 low), including development/server/image tooling. The Pages artifact is a static browser bundle and contains no server runtime. Local AI uses a small Node HTTP service and standard fetch. Local development uses the Vite browser entry rather than the earlier Vinext server entry. Broad dependency upgrades are outside this product-model revision.

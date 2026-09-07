@@ -61,3 +61,9 @@ Prepared September 7, 2026. These notes refer to the private source material sup
 6. Save locally and export a portable workshop artifact for Ben and Paul to exchange.
 
 A transcript text input is appropriate if it clearly serves as source notes. Any extraction must be truthful about whether it is manual, deterministic, or backed by a real AI connection. No real client data or private source text is needed for the default demo.
+
+## September 7 revision: industry independence and AI orchestration
+
+The user's follow-up explicitly broadens the first workshop: take the same pattern to OTAs, hospitals, and other digital businesses, define flows with shared terms, and establish an AI layer for efficiency. This newer direction supersedes the original linear-only implementation boundary.
+
+The revised model separates a case and its state from capabilities, components, actions, signals, decisions, and outcome evidence. It includes conditional routes, separate current/proposed definitions, rehearsal, and AI-generated design proposals. The cross-industry model and delegation architecture are proposed synthesis, informed by the primary sources documented in `universal-model.md` and `orchestration-design.md`.

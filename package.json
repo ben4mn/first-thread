@@ -1,20 +1,21 @@
 {
   "name": "first-thread",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "engines": {
     "node": ">=22.13.0"
   },
   "scripts": {
-    "dev": "vinext dev",
+    "dev": "vite --config vite.pages.config.ts --host 127.0.0.1",
     "build": "vite build --config vite.pages.config.ts && node scripts/verify-build.mjs",
     "start": "npm run preview:pages",
     "lint": "oxlint app lib tests",
     "format": "oxfmt",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test tests/*.test.ts",
+    "test": "node --experimental-strip-types --test tests/*.test.ts tests/*.test.mjs",
     "build:pages": "PAGES_BASE_PATH=/first-thread vite build --config vite.pages.config.ts && PAGES_BASE_PATH=/first-thread node scripts/verify-build.mjs",
-    "preview:pages": "node scripts/preview.mjs"
+    "preview:pages": "node scripts/preview.mjs",
+    "dev:ai": "node --experimental-strip-types --env-file-if-exists=.env.local scripts/dev-ai.mjs"
   },
   "dependencies": {
     "react": "19.2.6",

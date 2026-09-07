@@ -1,53 +1,63 @@
-# First Thread
+# First Thread · Flow studio
 
-A small scenario workshop for Ben and Paul. Start with one trigger and one intended outcome, map the route between them, inspect the handoffs, and choose a first move toward a better state.
+An industry-independent workshop for understanding how digital work moves between people, systems, and AI.
 
-**[Open the prototype](https://ben4mn.github.io/first-thread/)** · **[Company notebook](https://ben4mn.github.io/first-thread/#/company)** · **[Workshop guide](docs/workshop-guide.md)**
+**[Open the studio](https://ben4mn.github.io/first-thread/)** · **[Model & method](https://ben4mn.github.io/first-thread/#/method)** · **[Company notebook](https://ben4mn.github.io/first-thread/#/company)**
 
-First Thread is a temporary name. This is a new distribution; the earlier SignalBraid and Atlas projects were context, not the starting codebase.
+The first version mapped a linear scenario. Version 0.2 models a **business case moving through states**, with reusable capabilities, components, actions, signal contracts, decisions, exceptions, authorization, and outcome evidence. Fictional OTA, hospital-administration, and commerce flows use the same grammar.
 
-## The useful loop
+## What works
 
-1. Start with the fictional example, or create a scenario with one trigger and one intended outcome.
-2. Add the people, teams, and tools along its route. Record ownership, incoming/outgoing signals, surfaces, channels, and friction.
-3. Select a step for its detailed view; edit and reorder it as the conversation changes your understanding.
-4. Distinguish observed evidence, reported information, and assumptions. Capture supporting notes and adjacent dependencies.
-5. Describe State B, a first move, the hypothesis, success evidence, an owner, and a fallback.
-6. Export a Markdown brief or a JSON workspace. Paul can import the workspace on his device and continue.
-
-The company notebook contains editable mission and vision statements, working principles, provisional vocabulary, open business questions, and workshop notes. The fuller source-controlled drafts live in [`docs/`](docs/).
+- Define and edit your own flow; capture the case, trigger, outcome, discovery notes, future state, and first pilot.
+- Add actions and reusable components, edit their contracts, position them on a swimlane map, and connect named conditional signals.
+- Inspect capabilities independently of the software or teams providing them.
+- Keep separate current and proposed flows. Describe bounded AI tasks, expected outputs, review, and fallback.
+- Rehearse normal, incomplete, exception, uncertain-AI, and failed-tool cases. Review/reject before proceeding; inspect the path and export a trace.
+- Compare entered handling/waiting assumptions for the route actually traversed. No measured efficiency or ROI is claimed.
+- Export an AI design brief and validate a structured proposal, or use the optional local API connection to generate proposals directly.
+- Edit company mission, vision, and workshop notes. Export/import complete workspaces and readable Markdown briefs.
 
 ## Run locally
 
-Use **Node 22.13 or newer** (Node 24 recommended) and npm. No API key or paid service is needed.
+Use **Node 24** and npm:
 
 ```bash
 npm ci
-npm run dev -- --port 5274
+npm run dev -- --port 5274 --strictPort
 ```
 
-Open `http://localhost:5274`. The development server also listens on the local network so a workshop participant can open the printed Network address. Local network access depends on the computers' firewall and VPN settings.
+Open `http://127.0.0.1:5274`. The public studio needs no API key. To expose a normal local workshop to your LAN, explicitly add `--host 0.0.0.0`; local AI remains loopback-only.
 
-To ask a coding agent to help, open this repository in your editor and say: “Read AGENTS.md and run First Thread locally.”
+For direct AI drafting, configure `.env.local` and run `npm run dev:ai`. See [AI connection](docs/ai-connection.md). No API key or model was configured during this build; provider behavior was tested with controlled responses.
 
-## What saves, and where
+## Where work lives
 
-- Changes save immediately to this browser's local storage under `first-thread.workspace.v1`.
-- Work is device- and origin-specific. The local app and GitHub Pages have separate storage.
-- **Export workspace** includes every scenario and the edited company statements/notes. **Import workspace** validates the file and asks before replacing the current workspace. Export a backup first.
-- **Export brief** creates a readable Markdown record of the selected scenario. Company notes have their own Markdown export.
-- There is no account, shared database, live collaboration, analytics, or background network submission of workshop notes. Clearing browser storage clears local work.
-- The public demo includes only fictional operational data and curated company synthesis. Do not commit private customer information, raw meeting transcripts, recordings, or credentials to this public repository.
+Workspaces save in browser storage under `first-thread.workspace.v2`. Existing v1 workspaces and exports migrate with their original notes and linear route preserved. The original v1 browser value is retained as a recovery source. If only the untouched stock demo existed, the new examples open first and the original demo is retained.
 
-## Deliberate limits
+Current and proposed graphs are saved independently. Imports validate before a replacement confirmation. Export before changing devices, switching local/hosted origins, or replacing a workspace. One editing tab is recommended; concurrent tabs do not merge changes.
 
-This is a manual workshop prototype. It does not transcribe audio, extract a map with AI, discover systems, verify evidence, estimate ROI, or execute operational changes. A future state is a written hypothesis and first experiment, not a second executable graph.
+The workspace limit is 2 MB UTF-8. Text fields support 40,000 characters. The UI supports 100 flows and 100 actions per flow; migration accepts additional terminal nodes needed to preserve legacy maps. Invalid or oversized changes are rejected before replacement.
 
-A scenario has a linear ordered route; one trigger and one intended outcome is a **working convention**, not a claim about all business processes. Record branches and adjacent dependencies in notes, or split distinct outcomes into separate scenarios. Shared components and branched maps are future workshop decisions.
+Public assets contain only fictional examples and curated company synthesis. Workshop input is not sent anywhere by the public site. Local AI sends the selected design context to OpenAI only when explicitly requested. Raw private transcripts, recordings, and credentials are not included in this public repository.
 
-Exports support up to 100 scenarios, 100 steps per scenario, 40,000 characters per text field, and 2 MB total in UTF-8. Edits that would exceed the total are rejected before changing the workspace, so an exported backup remains importable. If storage is blocked or full, the app reports that changes are only in memory and offers export. One active editing tab is recommended; simultaneous browser tabs do not merge changes.
+## Deliberate runtime boundary
 
-## Validate and publish
+**Definition:** a map of what should happen. **Rehearsal:** a deterministic trace of a hypothetical case. **AI design:** a structured model proposal. **Live operation:** a future execution service with real connectors, durable state, authorization, and outcome receipts.
+
+The public prototype and optional local AI service do not execute business actions. AI review in rehearsal confirms an assumption that a contract was satisfied; it does not review an actual generated artifact. Failure/uncertainty pauses for human fallback rather than fabricating completion.
+
+Branching supports explicit context-ready and exception flags. Parallel joins, arbitrary policy expressions, timed retries, shared cross-flow components, external event ingestion, and durable live execution remain future work.
+
+## Learn and workshop
+
+- [Workshop guide](docs/workshop-guide.md)
+- [Universal model research and primary sources](docs/universal-model.md)
+- [Orchestration design and research](docs/orchestration-design.md)
+- [Company direction](docs/company-direction.md)
+- [Original conversation synthesis](docs/source-notes.md)
+- [Validation and known limits](docs/validation.md)
+
+## Validate and deploy
 
 ```bash
 npm test
@@ -57,12 +67,8 @@ npm run build:pages
 npm run preview:pages
 ```
 
-The production preview runs at `http://localhost:5275/first-thread/`. GitHub Actions runs the checks, builds a static browser app, and deploys `dist/client` to GitHub Pages after a push to `main`. The app uses hash navigation so company notebook links survive refresh on static hosting.
+The production preview runs under `http://localhost:5275/first-thread/`. GitHub Actions repeats checks and publishes the static `dist/client` artifact after a push to `main`. No server or API credential is published. Local development and Pages now use the same Vite browser entry.
 
-`npm run build` makes a root-path build. `npm run build:pages` sets `/first-thread` as the repository base path. If the repository is renamed, update this script, source links in `app/workshop.tsx`, and the preview script.
+`npm run build` creates a root-path build. If the repository is renamed, update the Pages base path, preview prefix, and repository links.
 
-The scaffold uses React, TypeScript, Vinext/Vite, and the supplied UI primitives. Local development uses Vinext; the Pages build compiles the same React workshop directly with Vite so the public app needs no server or React Server Component runtime. No server code or credentials are deployed. Lint covers application, domain, and test code; generated UI primitives are kept intact. See [validation notes](docs/validation.md).
-
-## Why this scope
-
-The **September 6, 2026** call takes precedence: V1 is for the founders; onboard one scenario; make its route legible; refine one useful piece. The earlier conversation supplies the longer ambition. [Source notes](docs/source-notes.md) distinguish source statements from proposed language and implementation choices.
+The scaffold uses React, TypeScript, Vite, and supplied UI primitives. Generated components and the dependency lockfile are retained. Start a coding agent with “Read AGENTS.md and run First Thread locally.”

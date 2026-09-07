@@ -1,9 +1,9 @@
 import type { Metadata } from 'next';
 import './globals.css';
 export const metadata: Metadata = {
-  title: 'First Thread — Scenario workshop',
+  title: 'First Thread — Flow studio',
   description:
-    'Map one scenario, understand the handoffs, and define a first move toward a better future state. A working prototype by Ben and Paul.',
+    'Define digital business flows, rehearse decisions and exceptions, and design bounded AI delegation across industries.',
 };
 export default function RootLayout({
   children,
